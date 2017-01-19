@@ -1,7 +1,6 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const tweetBank = require('../tweetBank');
 const client = require('../db');
 
 module.exports = io => {
@@ -54,32 +53,39 @@ module.exports = io => {
   // create a new tweet
   router.post('/tweets', (req, res, next) => {
     let userId;
-    function idLook() {
-      client.query('SELECT id FROM users WHERE name = $1', [req.body.name]), function (err, result){
-        if (err) return next(err);
-        userId = result.rows
+
+    client.query('SELECT id FROM users WHERE name = $1', [req.body.name], checkUser);
+
+
+    function checkUser(err, result){
+      if (err) return next(err);
+      if(result.rows.length){
+        insertTweet(null, result);
+      } else {
+        makeUser();
       }
     }
 
-    if(userId){
-      client.query('INSERT INTO tweets (user_id, content) VALUES ($1, $2)', [userId, req.body.text], function(err){
-       if (err) return next(err);
-      });
+    function makeUser(){
+      client.query('INSERT INTO users (name) VALUES($1) RETURNING *', [req.body.name], insertTweet);
     }
-    else {
-      client.query('INSERT INTO users (name) VALUES($1)', [req.body.name], function(err){
-        if(err) return next(err);
-      })
-    }
-    //const newTweet = tweetBank.add(req.body.name, req.body.text);
-    //io.sockets.emit('new_tweet', newTweet);
-    //res.redirect('/');
-  });
 
-  // // replaced this hard-coded route with general static routing in app.js
-  // router.get('/stylesheets/style.css', => (req, res, next){
-  //   res.sendFile('/stylesheets/style.css', { root: __dirname + '/../public/' });
-  // });
+    function insertTweet(err, result){
+      if (err) return next(err);
+      var myId = result.rows[0].id;
+      client.query('INSERT INTO tweets (user_id, content) VALUES ($1, $2)', [myId, req.body.text], function(err){
+          if (err) return next(err);
+          res.redirect('/');
+      });
+
+    }
+
+});
+
+//replaced this hard-coded route with general static routing in app.js
+router.get('/stylesheets/style.css', function (req, res, next){
+  res.sendFile('/stylesheets/style.css', { root: __dirname + '/../public/' });
+});
 
   return router;
-}
+};
